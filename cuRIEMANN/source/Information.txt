@@ -1,0 +1,123 @@
+
+************* TO-DO LIST *************
+
+
+************* ERROR CODES *************
+
+0  Success
+1  Construct_InvalidDevice,								Invalid device error returned from cudaGetDeviceProperties in entryConstruct() 
+2  Construct_Test_MemAlloc,								Memory allocation error returned from initial test cudaMalloc in entryInitialise()
+3  Construct_Test_InvalidPointer,						Invalid pointer error returned from initial test cudaFree in entryInitialise()
+
+4  Initialise_Host_HostResults_MemAlloc,				Null pointer returned from host allocation of globalHostResults in entryInitialise()
+5  Initialise_Host_Stack_MemAlloc,						Null pointer returned from host allocation of globalStack in entryInitialise()
+
+6  Initialise_Device_DeviceResults_InvalidPointer,		Invalid pointer error returned from cudaFree of globalDeviceResults in entryInitialise()
+7  Initialise_Device_DeviceResults_MemAlloc,			Memory allocation error returned from cudaMalloc of globalDeviceResults in entryInitialise()
+8  Initialise_Device_Stack_InvalidPointer,				Invalid pointer error returned from cudaFree of globalStack in entryInitialise()
+9  Initialise_Device_Stack_MemAlloc,					Memory allocation error returned from cudaMalloc of globalStack in entryInitialise()
+10 Initialise_Device_List_InvalidPointer,				Invalid pointer error returned from cudaFree of globalList in entryInitialise()
+11 Initialise_Device_List_MemAlloc,						Memory allocation error returned from cudaMalloc of globalList in entryInitialise()
+
+12 Initialise_Copy_List_Error,							Error returned from cudaMemcpy of List in entryInitialise()
+
+13 Calculate_Copy_Results_Error,						Error returned from cudaMemcpy of results in entryCalculate()
+
+14 Destruct_Device_List_InvalidPointer,					Invalid pointer error returned from cudaFree of globalDeviceResults in destruct()
+15 Destruct_Device_DeviceResults_InvalidPointer,		Invalid pointer error returned from cudaFree of globalStack in entryDestruct()
+16 Destruct_Device_Stack_InvalidPointer,				Invalid pointer error returned from cudaFree of globalList in entryDestruct()
+
+************* FUNCTIONS *************	
+
+
+
+binary operator:
+0  -
+1  +
+2  *
+3  /
+4  ^
+5  log
+
+unary operators:
+6  neg
+7  conj
+8  sqrt
+9  ln
+10 exp
+11 sinh
+12 cosh
+13 tanh
+14 sin
+15 cos
+16 tan
+17 asinh
+18 acosh
+19 atanh
+20 asin
+21 acos
+22 atan
+23 inv [reciprocal]
+24 mod
+25 arg
+
+************* SHARED Vs GLOBAL MEMORY *************
+
+To avoid a drop in performance by using too much shared memory, if the stack maximum is calculated to be greater than 4, global memory will be used on the device, instead of shared. 
+
+When shared memory is used, it is grouped by thread. So, in the following examples we use a small sample of 5 threads, with a max stack size of 3. In shared memory we have:
+
+123123123123123
+
+where 1 represents the first element in each stack, 2 represents the next element, and so on. In the shared memory model, entire stacks for a thread are placed contionuously in memory. However, in global memory this would result in striding memory calls, and lower performance.
+To avoid this, in the global memory we group not by thread, but by index:
+
+111112222233333
+
+So when requesting the stack data in threads concurrently, the data is coalesced and this results in single instruction requests.
+
+It is also worth noting that the stack pointer is unique in the sense that it does not point to the next item (as conventional stack pointers too) but rather the current item, which makes computation faster. This means when the stack pointer is initialised, it is initialised to one 'position'
+before it's first location. In shared space this means only one thread (the first in the block) will point to an object outside the array, but with global memory ALL pointers start by indexing outside the array. It is therefore imperritive that the first token is not a function, as this will cause a runtime error,
+since no checking is done at runtime. It is the responsibility of the controller code (any application that uses cdComplex.dll) to verify the token list.
+
+
+************* DLL ENTRY POINTS *************
+
+===============
+entryConstruct
+===============
+
+This function initialises global variables (with nullptr for pointers, and 0 for standard variables), decides between device and host execution (and updates isHost accordingly) and either calculates the number of threads available for concurrent execution in host code, or 
+selects GPU(s) for device execution. This function should only be called ONCE in the controller programs execution, preferably at startup.
+
+===============
+entryInitialise
+===============
+
+This function allocates memory and sets up the global variables. Based on whether the device or the host is used, and whether shared memory or global memory is used, the function will decide which variables require allocation. This function takes three parameters, the token list, width and height of the canvas.
+This function should be called any time the width, height or token list changes (for example when the window is re-sized or the user changes the formula). Is MUST be called at least once before entryCalculate is called. It is also worth noting that the function will only deem a reallocation necessary if the number 
+of bytes required exceeds the number of bytes currently allocated, in any memory space. 
+
+===============
+entryCalculate
+===============
+
+This function takes the parameters minimum doman and maximum domain (and an optional error code) and along with the global memory  populates the globalHostResults array with data and returns a pointer to this array. This function itself performs no allocation, and only executed a device to host copy after the result is calculated.
+
+===============
+ entryDestruct
+===============
+
+This function frees up memory used by the host and device.
+
+===============
+ entryTranslate
+===============
+
+This function takes an error code (of type ERRORCODE) and converts it to a string representation of the error.
+
+===============
+   entryTrace
+===============
+
+This function takes a complex value, z, computes f(z), the color of f(z) and returns the two results.
