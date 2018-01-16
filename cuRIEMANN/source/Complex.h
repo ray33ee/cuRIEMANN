@@ -116,7 +116,9 @@ __device__ __host__ RGB color(const thrust::complex<T> &z)
 	T hue, lightness, modarg;
 
 	hue = (thrust::arg(z) + 3.14159265359f) / 6.28318530718f;
-	modarg = logf(thrust::abs(z));
+	modarg = log(thrust::abs(z));
+
+	
 
 	if (modarg < 0)
 	{
@@ -125,9 +127,9 @@ __device__ __host__ RGB color(const thrust::complex<T> &z)
 	else
 	{
 		if (!((int)modarg & 1)) //If whole part of modarg is even, 0 --> 1 maps to black --> white
-			lightness = (modarg - floorf(modarg)) / 2.0f + 0.25f;
+			lightness = (modarg - floor(modarg)) / 2.0f + 0.25f;
 		else //If whole part of modarg is odd 0 --> 1 maps to white --> black
-			lightness = 0.75f - (modarg - floorf(modarg)) / 2.0f;
+			lightness = 0.75f - (modarg - floor(modarg)) / 2.0f;
 	}
 	return HLtoRGB(hue, lightness);
 }
@@ -135,7 +137,7 @@ __device__ __host__ RGB color(const thrust::complex<T> &z)
 template <class T>
 __device__ __host__ const thrust::complex<T>& calculate(thrust::complex<T> z, Token* list, unsigned tokenCount, thrust::complex<T>* stackTop, unsigned stride)
 {
-	for (int i = 0; i < tokenCount; ++i)
+	for (unsigned i = 0; i < tokenCount; ++i)
 	{
 		if (list[i].type == 1)
 		{
@@ -262,7 +264,7 @@ __device__ __host__ void calculate(int ind, thrust::complex<T>* stackTop, RGB* r
 template <class T>
 __host__ void concurrentCalculate(unsigned blockIndex, unsigned blockSize, RGB* results, thrust::complex<T>* stack, Token* list, unsigned tokenCount, unsigned stackMaxCount, thrust::complex<T> min, thrust::complex<T> diff, unsigned width, unsigned height)
 {
-	for (auto i = 0; i < blockSize; ++i)
+	for (unsigned i = 0; i < blockSize; ++i)
 	{
 		auto index = blockIndex * blockSize + i;
 		calculate(index, stack + index * stackMaxCount, results, list, tokenCount, min, diff, width, height, 1);

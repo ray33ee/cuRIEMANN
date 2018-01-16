@@ -7,3 +7,6 @@ FIRST COMMIT - Version 1.0.0
 ==========================================================================
  - Version 1.0.1
 ==========================================================================
+
+ - Removed Unused variable from int main()
+ - floorf replaced with floor and logf replaced with log to ensure double precision math in RGB color(complex) function

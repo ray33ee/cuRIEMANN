@@ -249,7 +249,7 @@ __host__ void entryTrace(thrust::complex<DoublePrecision> variable, RGB &col, th
 
 int main()
 {
-	ERRORCODES error;
+
 
 	entryConstruct(true);
 
@@ -268,7 +268,7 @@ int main()
 
 	entryInitialise(1920, 1080, list, answer); //1920 x 1080 f(z) = z Quickest, simplest full HD graph
 
-	error = entryCalculate({ -200.0f, -200.0f }, { 300.0f, 300.0f });
+	entryCalculate({ -200.0f, -200.0f }, { 300.0f, 300.0f });
 
 	RGB color; 
 	thrust::complex<double> z;
