@@ -19,7 +19,6 @@ Global
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{BE6C121D-7A94-4FB8-AE43-38CA33579C8F}.Debug|Any CPU.ActiveCfg = Debug|Win32
 		{BE6C121D-7A94-4FB8-AE43-38CA33579C8F}.Debug|Mixed Platforms.ActiveCfg = Release|Win32
-		{BE6C121D-7A94-4FB8-AE43-38CA33579C8F}.Debug|Mixed Platforms.Build.0 = Release|Win32
 		{BE6C121D-7A94-4FB8-AE43-38CA33579C8F}.Debug|Win32.ActiveCfg = Debug|Win32
 		{BE6C121D-7A94-4FB8-AE43-38CA33579C8F}.Debug|Win32.Build.0 = Debug|Win32
 		{BE6C121D-7A94-4FB8-AE43-38CA33579C8F}.Debug|x64.ActiveCfg = Debug|x64

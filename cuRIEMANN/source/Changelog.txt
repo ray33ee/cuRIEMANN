@@ -10,3 +10,10 @@ FIRST COMMIT - Version 1.0.0
 
  - Removed Unused variable from int main()
  - floorf replaced with floor and logf replaced with log to ensure double precision math in RGB color(complex) function
+
+ ==========================================================================
+ - Version 1.0.2
+==========================================================================
+
+ - Changed TokenList to object, not pointer
+ - Re-arranged parameters in entryTrace, changed from passing by reference to by pointer, added default arguments

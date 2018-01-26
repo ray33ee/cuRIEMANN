@@ -104,9 +104,9 @@ __host__ ERRORCODES entryConstruct(int flags = 0)
 	return Success;
 }
 
-__host__ ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList* list, RGB* results)
+__host__ ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList list, RGB* results)
 {
-	globalMaxStack = list->getStackSize();
+	globalMaxStack = list.getStackSize();
 
 	if (isVerbose)
 		printf("Entry Initialise\n");
@@ -124,7 +124,7 @@ __host__ ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList* 
 			stackSize = width * height * globalMaxStack * sizeof(thrust::complex<SinglePrecision>); //Update stackSize
 		}
 		//delete[] globalList; //free current token list
-		globalList = list->formula(); //Update new tokenlist
+		globalList = list.formula(); //Update new tokenlist
 	}
 	else //Uses - globalList, d_results, results and d_stack
 	{
@@ -160,15 +160,15 @@ __host__ ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList* 
 			printf("	Copying list to device\n");
 		if (cudaFree(globalList) == cudaErrorInvalidDevicePointer) //Free device token list
 			return Initialise_Device_List_InvalidPointer;
-		if (cudaMalloc(&globalList, list->count() * sizeof(Token)) == cudaErrorMemoryAllocation) //Allocate new token list
+		if (cudaMalloc(&globalList, list.count() * sizeof(Token)) == cudaErrorMemoryAllocation) //Allocate new token list
 			return Initialise_Device_List_MemAlloc;
-		if (cudaMemcpy(globalList, list->formula(), list->count() * sizeof(Token), cudaMemcpyHostToDevice) != cudaSuccess) //Copy from host to device
+		if (cudaMemcpy(globalList, list.formula(), list.count() * sizeof(Token), cudaMemcpyHostToDevice) != cudaSuccess) //Copy from host to device
 			return Initialise_Copy_List_Error;
 	}
 	//Update new width and height
 	globalWidth = width;
 	globalHeight = height;
-	globalListCount = list->count();
+	globalListCount = list.count();
 	globalHostResults = results;
 	return Success;
 }
@@ -232,19 +232,38 @@ __host__ void entryTranslate()
 
 }
 
-__host__ void entryTrace(thrust::complex<DoublePrecision> variable, RGB &col, thrust::complex<DoublePrecision> &ans, TokenList* list, double& mod, double& arg)
+__host__ void entryTrace(thrust::complex<DoublePrecision> variable, TokenList list, thrust::complex<DoublePrecision> *ans, RGB *col = nullptr, double* mod = nullptr, double* arg = nullptr)
 {
-	auto stackmax = list->getStackSize();
+	auto stackmax = list.getStackSize();
 	thrust::complex<DoublePrecision>* stack = new thrust::complex<DoublePrecision>[stackmax];
 
 	--stack; //Stack is a before the beginning pointer, so decrement before use
 
-	ans = calculate(variable, list->formula(), list->count(), stack, 1);
-	mod = thrust::abs(ans);
-	arg = thrust::arg(ans);
-	col = color(ans);
+	*ans = calculate(variable, list.formula(), list.count(), stack, 1);
+
+	if (mod != nullptr)
+		*mod = thrust::abs(*ans);
+	if (arg != nullptr)
+		*arg = thrust::arg(*ans);
+	if (col != nullptr)
+		*col = color(*ans);
 
 	//delete stack;
+}
+
+__host__ thrust::complex<DoublePrecision> traceWrapper(TokenList list, thrust::complex<DoublePrecision> value)
+{
+	thrust::complex<DoublePrecision> ans;
+	entryTrace(value, list, &ans);
+	return ans;
+}
+
+__host__ thrust::complex<DoublePrecision> entryGradient(TokenList list, thrust::complex<DoublePrecision> value)
+{
+	//determine a suitably small value of h as sqrt(epsilon)*x. Since x=0 will result in divide by zero, replace x with suitably small value, i.e. x=epsilon.
+	auto h = sqrt(machine_epsilon()) * value;
+
+	return (traceWrapper(list, value + h) - traceWrapper(list, value)) / h;
 }
 
 int main()
@@ -255,7 +274,7 @@ int main()
 
 	auto answer = new RGB[1920*1080];
 
-	TokenList* list;
+	TokenList list;
 	unsigned count = 3;
 
 	Token* tokens = new Token[count];
@@ -264,7 +283,7 @@ int main()
 	tokens[1] = { 1, { 0, 0 } };
 	tokens[2] = { 2, { 4, 0 } };
 
-	list = new TokenList(count, tokens);
+	list = { count, tokens };
 
 	entryInitialise(1920, 1080, list, answer); //1920 x 1080 f(z) = z Quickest, simplest full HD graph
 
@@ -274,7 +293,7 @@ int main()
 	thrust::complex<double> z;
 	double mod, arg;
 
-	entryTrace({ 3.0, 0.0 }, color, z, list, mod, arg);
+	entryTrace({ 3.0, 0.0 }, list, &z, &color, &mod, &arg);
 
 	printf("answer: %f, %f - %f, %f\n", z.real(), z.imag(), mod, arg);
 

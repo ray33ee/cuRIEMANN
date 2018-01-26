@@ -85,7 +85,7 @@ extern "C" {
 
 	extern "C" __declspec(dllexport) ERRORCODES entryConstruct(int);
 
-	extern "C" __declspec(dllexport) ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList* list, RGB* results);
+	extern "C" __declspec(dllexport) ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList list, RGB* results);
 	
 	extern "C" __declspec(dllexport) ERRORCODES entryCalculate(thrust::complex<SinglePrecision> min, thrust::complex<SinglePrecision> max);
 
@@ -93,7 +93,9 @@ extern "C" {
 
 	extern "C" __declspec(dllexport) void entryTranslate();
 		
-	extern "C" __declspec(dllexport) void entryTrace(thrust::complex<DoublePrecision>, RGB &, thrust::complex<DoublePrecision> &, TokenList*, double&, double&);
+	extern "C" __declspec(dllexport) void entryTrace(thrust::complex<DoublePrecision>, TokenList, thrust::complex<DoublePrecision>*, RGB*, double*, double*);
+	
+	extern "C" __declspec(dllexport) thrust::complex<DoublePrecision> entryGradient(TokenList list, thrust::complex<DoublePrecision>);
 
 
 #ifdef __cplusplus

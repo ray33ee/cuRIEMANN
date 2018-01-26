@@ -331,3 +331,13 @@ __global__ void globalCalculate(RGB* results, thrust::complex<T>* stack, Token* 
 		calculate<T>(i, stackTop, results, list, tokenCount, minDomain, diffDomain, width, height, width * height);
 	}
 }
+
+__host__ double machine_epsilon()
+{
+	double epsilon = 1.0;
+
+	while ((1.0 + 0.5 * epsilon) != 1.0)
+		epsilon = 0.5 * epsilon;
+
+	return epsilon;
+}
