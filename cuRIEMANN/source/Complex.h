@@ -8,60 +8,6 @@
 #include <vector>
 #include <algorithm>
 
-/*template <class T>
-class TokenList
-{
-private:
-	Token* m_pFormula;
-	unsigned m_iCount;
-
-public:
-	TokenList() : m_pFormula(nullptr), m_iCount(0) {}
-	TokenList(unsigned s, Token* f) : m_pFormula(f), m_iCount(s) {}
-	
-	unsigned count() const { return m_iCount; }
-	unsigned type(unsigned i) const { return m_pFormula[i].m_iType; }
-	const thrust::complex<T>& data(unsigned i) const { return m_pFormula[i].m_cData; }
-
-	//Token* getPointer() const { return m_pFormula; }
-
-	unsigned getStackSize() const
-	{
-		unsigned maxSize = 1;
-		unsigned stackSize = 0;
-
-		for (unsigned i = 0; i < m_iCount; ++i)
-		{
-			if (m_pFormula[i].m_iType == 2 && m_pFormula[i].m_cData.real() < 6) //If item is a binary operator, 2 items will be popped one pushed, with a net movement of -1
-				stackSize--;
-			else if (m_pFormula[i].m_iType == 1 || m_pFormula[i].m_iType == 3) //If the item is z or a constant, 1 item will be pushed, with a net movement of +1
-				stackSize++;
-			//Otherise the item is a unary operator, which pops one item and pushes one item, not affecting the size.
-			maxSize = stackSize > maxSize ? stackSize : maxSize;
-		}
-		return maxSize;
-	}
-};*/
-
-/*unsigned getStackSize(TokenList* list)
-{
-	unsigned maxSize = 1;
-	unsigned stackSize = 0;
-
-	for (unsigned i = 0; i < list->count(); ++i)
-	{
-		printf("Token: %i\n", list->type(i));
-		if (list->type(i) == 2 && list->formula[i].data.real() < 6) //If item is a binary operator, 2 items will be popped one pushed, with a net movement of -1
-			stackSize--;
-		else if (list->formula[i].type == 1 || list->formula[i].type == 3) //If the item is z or a constant, 1 item will be pushed, with a net movement of +1
-			stackSize++;
-		//Otherise the item is a unary operator, which pops one item and pushes one item, not affecting the size.
-		maxSize = stackSize > maxSize ? stackSize : maxSize;
-	}
-	printf("max: %i\n", maxSize);
-	return maxSize;
-}*/
-
 template <class T> 
 __device__ __host__ static RGB HLtoRGB(T &h, T &l)
 {
@@ -150,11 +96,11 @@ __device__ __host__ const thrust::complex<T>& calculate(thrust::complex<T> z, To
 			{
 			case 0:
 				stackTop -= stride;
-				*stackTop = *stackTop - *(stackTop + 1); //Equivalent to popping two operands from stack, subtracting them, and pushing the result.
+				*stackTop = *stackTop + *(stackTop + 1); //Equivalent to popping two operands from stack, subtracting them, and pushing the result.
 				break;
 			case 1:
 				stackTop -= stride;
-				*stackTop = *stackTop + *(stackTop + 1);
+				*stackTop = *stackTop - *(stackTop + 1);
 				break;
 			case 2:
 				stackTop -= stride;
@@ -244,12 +190,12 @@ __device__ __host__ const thrust::complex<T>& calculate(thrust::complex<T> z, To
 }
 
 template <class T>
-__device__ __host__ void calculate(int ind, thrust::complex<T>* stackTop, RGB* results, Token* list, unsigned tokenCount, thrust::complex<T> minDomain, thrust::complex<T> diffDomain, unsigned width, unsigned height, unsigned stackStride)
+__device__ __host__ void calculate(int ind, thrust::complex<T>* stackTop, RGB* results, Token* list, unsigned tokenCount, thrust::complex<T> firstDomain, thrust::complex<T> diffDomain, unsigned width, unsigned height, unsigned stackStride)
 {
 	
 		thrust::complex<T> z = {
-			minDomain.real() + diffDomain.real() * (ind % width) / width,
-			minDomain.imag() + diffDomain.imag() * (ind / width) / height
+			firstDomain.real() + diffDomain.real() * (ind % width) / width,
+			firstDomain.imag() + diffDomain.imag() * (ind / width) / height
 		};
 
 		thrust::complex<T> ans = calculate(z, list, tokenCount, stackTop, stackStride);
@@ -262,17 +208,17 @@ __device__ __host__ void calculate(int ind, thrust::complex<T>* stackTop, RGB* r
 
 // Function called concurrently by host threads
 template <class T>
-__host__ void concurrentCalculate(unsigned blockIndex, unsigned blockSize, RGB* results, thrust::complex<T>* stack, Token* list, unsigned tokenCount, unsigned stackMaxCount, thrust::complex<T> min, thrust::complex<T> diff, unsigned width, unsigned height)
+__host__ void concurrentCalculate(unsigned blockIndex, unsigned blockSize, RGB* results, thrust::complex<T>* stack, Token* list, unsigned tokenCount, unsigned stackMaxCount, thrust::complex<T> first, thrust::complex<T> diff, unsigned width, unsigned height)
 {
 	for (unsigned i = 0; i < blockSize; ++i)
 	{
 		auto index = blockIndex * blockSize + i;
-		calculate(index, stack + index * stackMaxCount, results, list, tokenCount, min, diff, width, height, 1);
+		calculate(index, stack + index * stackMaxCount, results, list, tokenCount, first, diff, width, height, 1);
 	}
 }
 
 template <class T>
-__host__ void hostCalculate(RGB* results, thrust::complex<T>* stack, Token* list, unsigned tokenCount, unsigned stackMaxCount, thrust::complex<T> min, thrust::complex<T> diff, unsigned width, unsigned height)
+__host__ void hostCalculate(RGB* results, thrust::complex<T>* stack, Token* list, unsigned tokenCount, unsigned stackMaxCount, thrust::complex<T> first, thrust::complex<T> diff, unsigned width, unsigned height)
 {
 	unsigned count = width * height;
 
@@ -285,59 +231,52 @@ __host__ void hostCalculate(RGB* results, thrust::complex<T>* stack, Token* list
 	auto blockSize = count / threadsAvailable;
 	
 	for (unsigned i = 0; i < threadsAvailable; ++i)
-			threads.push_back(std::thread(concurrentCalculate<T>, i, blockSize + (count % threadsAvailable), results, stack, list, tokenCount, stackMaxCount, min, diff, width, height)); //Conditional statement used to assign final thread, which may contain a larger block if threadsToUse doesn't divide into height.
+			threads.push_back(std::thread(concurrentCalculate<T>, i, blockSize + (count % threadsAvailable), results, stack, list, tokenCount, stackMaxCount, first, diff, width, height)); //Conditional statement used to assign final thread, which may contain a larger block if threadsToUse doesn't divide into height.
 
 	for (auto &iter : threads)
 		iter.join();
 }
 
 //Following kernel uses shared memory to contain stack
-__global__ void sharedCalculatef(RGB* results, Token* list, unsigned tokenCount, unsigned stackMaxCount, thrust::complex<SinglePrecision> minDomain, thrust::complex<SinglePrecision> diffDomain, unsigned width, unsigned height, unsigned N) //
+__global__ void sharedCalculatef(RGB* results, Token* list, unsigned tokenCount, unsigned stackMaxCount, Complex firstDomain, Complex diffDomain, unsigned width, unsigned height, unsigned N) //
 {
-	extern __shared__ thrust::complex<SinglePrecision> stackBlockf[];
+	extern __shared__ Complex stackBlockf[];
 
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (i < N)
 	{
 		auto stackTop = stackBlockf + threadIdx.x * stackMaxCount - 1; //Pointer to top element in stack
-		calculate<SinglePrecision>(i, stackTop, results, list, tokenCount, minDomain, diffDomain, width, height, 1);
-	}
-}
-
-//Following kernel uses shared memory to contain stack
-__global__ void sharedCalculated(RGB* results, Token* list, unsigned tokenCount, unsigned stackMaxCount, thrust::complex<DoublePrecision> minDomain, thrust::complex<DoublePrecision> diffDomain, unsigned width, unsigned height, unsigned N, bool isOver) //
-{
-	extern __shared__ thrust::complex<DoublePrecision> stackBlock[];
-
-	int i = blockIdx.x * blockDim.x + threadIdx.x;
-
-	if (i < N)
-	{
-		auto stackTop = stackBlock + threadIdx.x * stackMaxCount - 1; //Pointer to top element in stack
-		calculate<DoublePrecision>(i, stackTop, results, list, tokenCount, minDomain, diffDomain, width, height, 1);
+		calculate<SinglePrecision>(i, stackTop, results, list, tokenCount, firstDomain, diffDomain, width, height, 1);
 	}
 }
 
 //Following kernel uses global memory to contain stack
 template <class T>
-__global__ void globalCalculate(RGB* results, thrust::complex<T>* stack, Token* list, unsigned tokenCount, unsigned stackMaxCount, thrust::complex<T> minDomain, thrust::complex<T> diffDomain, unsigned width, unsigned height, unsigned N) //
+__global__ void globalCalculate(RGB* results, thrust::complex<T>* stack, Token* list, unsigned tokenCount, unsigned stackMaxCount, thrust::complex<T> firstDomain, thrust::complex<T> diffDomain, unsigned width, unsigned height, unsigned N) //
 {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (i < N)
 	{
 		auto stackTop = stack + i - width * height; //Pointer to top element in stack
-		calculate<T>(i, stackTop, results, list, tokenCount, minDomain, diffDomain, width, height, width * height);
+		calculate<T>(i, stackTop, results, list, tokenCount, firstDomain, diffDomain, width, height, width * height);
 	}
 }
 
-__host__ double machine_epsilon()
+template <class T>
+__host__ T traceWrapper(TokenList list, T value)
 {
-	double epsilon = 1.0;
+	T ans;
+	entryTrace(value, list, &ans);
+	return ans;
+}
 
-	while ((1.0 + 0.5 * epsilon) != 1.0)
-		epsilon = 0.5 * epsilon;
+template <class T>
+__host__ T fast_gradient(TokenList list, T value)
+{
+	//determine a suitably small value of h as sqrt(epsilon)*x. Since x=0 will result in divide by zero, replace x with suitably small value, i.e. x=epsilon.
+	auto h = sqrt(MAGIC) * value;
 
-	return epsilon;
+	return (traceWrapper(list, value + h) - traceWrapper(list, value)) / h;
 }

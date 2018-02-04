@@ -18,9 +18,13 @@ extern "C" {
 	typedef double  SinglePrecision;
 	typedef double DoublePrecision;
 
+	typedef thrust::complex<double> Complex; 
+
 	struct RGB { unsigned char a;  unsigned char r; unsigned char g; unsigned char b; };
 
-	struct Token { int type; thrust::complex<SinglePrecision> data; };
+	struct Token { int type; Complex data; };
+
+	const double MAGIC = 2.16e-13; //Modified machine-epsilon value, changed to work with thrust trig functions.
 
 	class TokenList
 	{
@@ -34,7 +38,7 @@ extern "C" {
 
 		unsigned count() const { return m_iCount; }
 		unsigned type(unsigned i) const { return m_pFormula[i].type; }
-		const thrust::complex<SinglePrecision>& data(unsigned i) const { return m_pFormula[i].data; }
+		const Complex& data(unsigned i) const { return m_pFormula[i].data; }
 
 		Token* formula() const { return m_pFormula; }
 
@@ -87,16 +91,17 @@ extern "C" {
 
 	extern "C" __declspec(dllexport) ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList list, RGB* results);
 	
-	extern "C" __declspec(dllexport) ERRORCODES entryCalculate(thrust::complex<SinglePrecision> min, thrust::complex<SinglePrecision> max);
+	extern "C" __declspec(dllexport) ERRORCODES entryCalculate(Complex min, Complex max);
 
 	extern "C" __declspec(dllexport) ERRORCODES entryDestruct();
 
 	extern "C" __declspec(dllexport) void entryTranslate();
 		
-	extern "C" __declspec(dllexport) void entryTrace(thrust::complex<DoublePrecision>, TokenList, thrust::complex<DoublePrecision>*, RGB*, double*, double*);
+	extern "C" __declspec(dllexport) void entryTrace(Complex, TokenList, Complex*, RGB*, double*, double*);
 	
-	extern "C" __declspec(dllexport) thrust::complex<DoublePrecision> entryGradient(TokenList list, thrust::complex<DoublePrecision>);
+	//extern "C" __declspec(dllexport) Complex entryGradient(TokenList, Complex);
 
+	extern "C" __declspec(dllexport) Complex entryNewtonRaphson(TokenList, Complex, int);
 
 #ifdef __cplusplus
 }

@@ -23,8 +23,8 @@ bool isVerbose; //For debugging purposes
 Token* globalList;
 RGB* globalDeviceResults;
 RGB* globalHostResults;
-thrust::complex<SinglePrecision>* globalStack;
-thrust::complex<DoublePrecision>* globalDoubleStack;
+Complex* globalStack;
+Complex* globalDoubleStack;
 
 unsigned globalListCount;
 unsigned globalMaxStack;
@@ -88,7 +88,6 @@ __host__ ERRORCODES entryConstruct(int flags = 0)
 	{
 		if (isVerbose)
 			printf("	Using Host...\n");
-
 	}
 	
 	
@@ -113,27 +112,27 @@ __host__ ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList l
 
 	if (isHost) //Uses - results, d_stack, globalList
 	{
-		if (stackSize < width * height * sizeof(thrust::complex<SinglePrecision>) * globalMaxStack) //Current stack array is too small, reallocate
+		if (stackSize < width * height * sizeof(Complex) * globalMaxStack) //Current stack array is too small, reallocate
 		{
 			if (isVerbose)
 				printf("	Reallocate host stack - Host\n");
 			//delete[] globalStack; //Delete current stack array if allocated
-			globalStack = new (std::nothrow) thrust::complex<SinglePrecision>[width*height*globalMaxStack]; //Construct new stack array
+			globalStack = new (std::nothrow) Complex[width*height*globalMaxStack]; //Construct new stack array
 			if (globalStack == nullptr)
 				return Initialise_Host_Stack_MemAlloc;
-			stackSize = width * height * globalMaxStack * sizeof(thrust::complex<SinglePrecision>); //Update stackSize
+			stackSize = width * height * globalMaxStack * sizeof(Complex); //Update stackSize
 		}
 		//delete[] globalList; //free current token list
 		globalList = list.formula(); //Update new tokenlist
 	}
 	else //Uses - globalList, d_results, results and d_stack
 	{
-		if (resultsSize < width * height * sizeof(thrust::complex<SinglePrecision>)) //Current results array is too small, reallocate
+		if (resultsSize < width * height * sizeof(Complex)) //Current results array is too small, reallocate
 		{
 			if (isVerbose)
 			{
-				printf("	Reallocate device results - Device - old size: %i, new size: %i\n", resultsSize, width * height * sizeof(thrust::complex<SinglePrecision>));
-				printf("	width: %i, height: %i, sizeof: %i\n", width, height, sizeof(thrust::complex<SinglePrecision>));
+				printf("	Reallocate device results - Device - old size: %i, new size: %i\n", resultsSize, width * height * sizeof(Complex));
+				printf("	width: %i, height: %i, sizeof: %i\n", width, height, sizeof(Complex));
 			}
 			if (cudaFree(globalDeviceResults) == cudaErrorInvalidDevicePointer) //Delete current device results array if allocated
 				return Initialise_Device_DeviceResults_InvalidPointer;
@@ -146,15 +145,15 @@ __host__ ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList l
 			printf("	Stack max: %i\n", globalMaxStack);
 		isShared = globalMaxStack < 5;
 
-		if (!isShared && stackSize < width * height * sizeof(thrust::complex<SinglePrecision>) * globalMaxStack) //If we're using global memory and the memory needs expanding...
+		if (!isShared && stackSize < width * height * sizeof(Complex) * globalMaxStack) //If we're using global memory and the memory needs expanding...
 		{
 			if (isVerbose)
 				printf("	Reallocate device stack - device\n");
 			if (cudaFree(globalStack) == cudaErrorInvalidDevicePointer) //Delete current stack array if allocated
 				return Initialise_Device_Stack_InvalidPointer;
-			if (cudaMalloc(&globalStack, width * height * globalMaxStack * sizeof(thrust::complex<SinglePrecision>)) == cudaErrorMemoryAllocation) //Construct new stack array
+			if (cudaMalloc(&globalStack, width * height * globalMaxStack * sizeof(Complex)) == cudaErrorMemoryAllocation) //Construct new stack array
 				return Initialise_Device_Stack_MemAlloc;
-			stackSize = width * height * globalMaxStack * sizeof(thrust::complex<SinglePrecision>); //Update stackSize
+			stackSize = width * height * globalMaxStack * sizeof(Complex); //Update stackSize
 		}
 		if (isVerbose)
 			printf("	Copying list to device\n");
@@ -173,7 +172,7 @@ __host__ ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList l
 	return Success;
 }
 
-__host__ ERRORCODES entryCalculate(thrust::complex<SinglePrecision> min, thrust::complex<SinglePrecision> max)
+__host__ ERRORCODES entryCalculate(Complex min, Complex max)
 {
 	if (isVerbose)
 		printf("Entry Calculate\n");
@@ -181,15 +180,19 @@ __host__ ERRORCODES entryCalculate(thrust::complex<SinglePrecision> min, thrust:
 	int N = globalWidth * globalHeight;
 	ERRORCODES err = Success;
 
+	auto first = Complex(min.real(), max.imag());
+
+	auto last = Complex(max.real(), min.imag());
+
 	if (!isHost)
 	{
 		if (isVerbose)
 			printf("	Single-precision Kernel Execuation\n");
 
 		if (isShared)
-			sharedCalculatef << < N / threadCount + (N % threadCount ? 1 : 0), threadCount, threadCount * globalMaxStack * sizeof(thrust::complex<SinglePrecision>) >> >(globalDeviceResults, globalList, globalListCount, globalMaxStack, min, max - min, globalWidth, globalHeight, globalWidth * globalHeight);
+			sharedCalculatef << < N / threadCount + (N % threadCount ? 1 : 0), threadCount, threadCount * globalMaxStack * sizeof(Complex) >> >(globalDeviceResults, globalList, globalListCount, globalMaxStack, first, last - first, globalWidth, globalHeight, globalWidth * globalHeight);
 		else
-			globalCalculate << < N / threadCount + (N % threadCount ? 1 : 0), threadCount >> >(globalDeviceResults, globalStack, globalList, globalListCount, globalMaxStack, min,max - min, globalWidth, globalHeight, globalWidth * globalHeight);
+			globalCalculate << < N / threadCount + (N % threadCount ? 1 : 0), threadCount >> >(globalDeviceResults, globalStack, globalList, globalListCount, globalMaxStack, first, last - first, globalWidth, globalHeight, globalWidth * globalHeight);
 		
 		if (cudaMemcpy(globalHostResults, globalDeviceResults, N*sizeof(RGB), cudaMemcpyDeviceToHost) != cudaSuccess)
 			err = Calculate_Copy_Results_Error;
@@ -199,7 +202,7 @@ __host__ ERRORCODES entryCalculate(thrust::complex<SinglePrecision> min, thrust:
 	}
 	else
 	{
-		hostCalculate(globalHostResults, globalStack, globalList, globalListCount, globalMaxStack, min, max - min, globalWidth, globalHeight);
+		hostCalculate(globalHostResults, globalStack, globalList, globalListCount, globalMaxStack, first, last - first, globalWidth, globalHeight);
 	}
 
 	return err;
@@ -232,10 +235,10 @@ __host__ void entryTranslate()
 
 }
 
-__host__ void entryTrace(thrust::complex<DoublePrecision> variable, TokenList list, thrust::complex<DoublePrecision> *ans, RGB *col = nullptr, double* mod = nullptr, double* arg = nullptr)
+__host__ void entryTrace(Complex variable, TokenList list, Complex *ans, RGB *col = nullptr, double* mod = nullptr, double* arg = nullptr)
 {
 	auto stackmax = list.getStackSize();
-	thrust::complex<DoublePrecision>* stack = new thrust::complex<DoublePrecision>[stackmax];
+	Complex* stack = new Complex[stackmax];
 
 	--stack; //Stack is a before the beginning pointer, so decrement before use
 
@@ -251,19 +254,22 @@ __host__ void entryTrace(thrust::complex<DoublePrecision> variable, TokenList li
 	//delete stack;
 }
 
-__host__ thrust::complex<DoublePrecision> traceWrapper(TokenList list, thrust::complex<DoublePrecision> value)
+/*__host__ Complex entryGradient(TokenList list, Complex value)
 {
-	thrust::complex<DoublePrecision> ans;
-	entryTrace(value, list, &ans);
-	return ans;
-}
+	return Complex();
+}*/
 
-__host__ thrust::complex<DoublePrecision> entryGradient(TokenList list, thrust::complex<DoublePrecision> value)
+__host__ Complex entryNewtonRaphson(TokenList list, Complex xn, int timeout)
 {
-	//determine a suitably small value of h as sqrt(epsilon)*x. Since x=0 will result in divide by zero, replace x with suitably small value, i.e. x=epsilon.
-	auto h = sqrt(machine_epsilon()) * value;
+	if (timeout-- == 0)
+		return xn;
 
-	return (traceWrapper(list, value + h) - traceWrapper(list, value)) / h;
+	auto next = xn - traceWrapper(list, xn) / fast_gradient(list, xn);
+
+	if (thrust::abs(next - xn) < MAGIC)
+		return next;
+
+	return entryNewtonRaphson(list, next, timeout);
 }
 
 int main()
