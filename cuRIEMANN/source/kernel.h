@@ -15,6 +15,8 @@
 extern "C" {
 #endif
 
+	typedef void(*LOG_STRING)(char*);
+
 	typedef double  SinglePrecision;
 	typedef double DoublePrecision;
 
@@ -87,7 +89,7 @@ extern "C" {
 
 	};
 
-	extern "C" __declspec(dllexport) ERRORCODES entryConstruct(int);
+	extern "C" __declspec(dllexport) ERRORCODES entryConstruct(bool, LOG_STRING);
 
 	extern "C" __declspec(dllexport) ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList list, RGB* results);
 	

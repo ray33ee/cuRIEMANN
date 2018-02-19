@@ -8,6 +8,7 @@
 #include "kernel.h"
 
 int const threadCount = 192; //Number of threads per block
+const int MAX_STR_BUFF = 40;
 
 //Dimensions
 unsigned globalWidth;
@@ -17,7 +18,8 @@ unsigned globalHeight;
 bool isHost; //host = true, false = device
 bool isShared; //shared memory = true, global memory = false
 
-bool isVerbose; //For debugging purposes
+LOG_STRING log_str; //For debugging purposes
+bool isForced;
 
 //Arrays
 Token* globalList;
@@ -33,31 +35,28 @@ unsigned globalMaxStack;
 unsigned resultsSize;
 unsigned stackSize;
 
-__host__ ERRORCODES entryConstruct(int flags = 0)
+__host__ ERRORCODES entryConstruct(bool force_host, LOG_STRING lstr)
 {
 	int deviceCount;
 
-	isVerbose = (flags & 0x1);
+	log_str = lstr;
+	isForced = force_host;
 
-	printf("Flag list:\n");
-	printf("Verbose: ");
-	if (flags & 0x1)
-		printf("On\n");
-	else
-		printf("Off\n");
+	if (log_str != nullptr)
+	{
+		log_str("Force Host: ");
+		if (force_host)
+			log_str("On\n");
+		else
+			log_str("Off\n");
+	}
 
-	printf("Force Host: ");
-	if (flags & 0x2)
-		printf("On\n");
-	else
-		printf("Off\n");
-
-	if (isVerbose)
-		printf("Entry Construct\n");
+	if (log_str != nullptr)
+		log_str("Entry Construct\n");
 
 	cudaError_t firstCall = cudaGetDeviceCount(&deviceCount); 
 
-	if (flags & 0x2) //Force host
+	if (isForced) //Force host
 		isHost = true;
 	else  //Try device, otherwise use host
 		isHost = firstCall == cudaErrorNoDevice || firstCall == cudaErrorInsufficientDriver;//No device or no proper device drivers, use host
@@ -69,8 +68,12 @@ __host__ ERRORCODES entryConstruct(int flags = 0)
 		{
 			cudaDeviceProp deviceProp;
 			cudaGetDeviceProperties(&deviceProp, device);
-			if (isVerbose)
-				printf("	Device %d has compute capability %d.%d.\n", device, deviceProp.major, deviceProp.minor);
+			if (log_str != nullptr)
+			{
+				char* s = new char[MAX_STR_BUFF];
+				sprintf(s, "	Device %d has compute capability %d.%d.\n", device, deviceProp.major, deviceProp.minor);
+				log_str(s);
+			}
 		}
 
 		{
@@ -80,14 +83,14 @@ __host__ ERRORCODES entryConstruct(int flags = 0)
 			if (cudaFree(a) == cudaErrorInvalidDevicePointer)
 				return Construct_Test_InvalidPointer;
 		}
-		if (isVerbose)
-			printf("	Using device...\n");
+		if (log_str != nullptr)
+			log_str("	Using device...\n");
 
 	}
 	else //Otherwise use host
 	{
-		if (isVerbose)
-			printf("	Using Host...\n");
+		if (log_str != nullptr)
+			log_str("	Using Host...\n");
 	}
 	
 	
@@ -107,15 +110,15 @@ __host__ ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList l
 {
 	globalMaxStack = list.getStackSize();
 
-	if (isVerbose)
-		printf("Entry Initialise\n");
+	if (log_str != nullptr)
+		log_str("Entry Initialise\n");
 
 	if (isHost) //Uses - results, d_stack, globalList
 	{
 		if (stackSize < width * height * sizeof(Complex) * globalMaxStack) //Current stack array is too small, reallocate
 		{
-			if (isVerbose)
-				printf("	Reallocate host stack - Host\n");
+			if (log_str != nullptr)
+				log_str("	Reallocate host stack - Host\n");
 			//delete[] globalStack; //Delete current stack array if allocated
 			globalStack = new (std::nothrow) Complex[width*height*globalMaxStack]; //Construct new stack array
 			if (globalStack == nullptr)
@@ -129,10 +132,14 @@ __host__ ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList l
 	{
 		if (resultsSize < width * height * sizeof(Complex)) //Current results array is too small, reallocate
 		{
-			if (isVerbose)
+			if (log_str != nullptr)
 			{
-				printf("	Reallocate device results - Device - old size: %i, new size: %i\n", resultsSize, width * height * sizeof(Complex));
-				printf("	width: %i, height: %i, sizeof: %i\n", width, height, sizeof(Complex));
+				char* s1 = new char[MAX_STR_BUFF];
+				char* s2 = new char[MAX_STR_BUFF];
+				sprintf(s1, "	Reallocate device results - Device - old size: %i, new size: %i\n", resultsSize, width * height * sizeof(Complex));
+				sprintf(s2, "	width: %i, height: %i, sizeof: %i\n", width, height, sizeof(Complex));
+				log_str(s1);
+				log_str(s2);
 			}
 			if (cudaFree(globalDeviceResults) == cudaErrorInvalidDevicePointer) //Delete current device results array if allocated
 				return Initialise_Device_DeviceResults_InvalidPointer;
@@ -141,22 +148,26 @@ __host__ ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList l
 			resultsSize = width * height * sizeof(RGB); //Update resultSize
 		}
 
-		if (isVerbose)
-			printf("	Stack max: %i\n", globalMaxStack);
+		if (log_str != nullptr)
+		{
+			char* s = new char[MAX_STR_BUFF];
+			sprintf(s, "	Stack max: %i\n", globalMaxStack);
+			log_str(s);
+		}
 		isShared = globalMaxStack < 5;
 
 		if (!isShared && stackSize < width * height * sizeof(Complex) * globalMaxStack) //If we're using global memory and the memory needs expanding...
 		{
-			if (isVerbose)
-				printf("	Reallocate device stack - device\n");
+			if (log_str != nullptr)
+				log_str("	Reallocate device stack - device\n");
 			if (cudaFree(globalStack) == cudaErrorInvalidDevicePointer) //Delete current stack array if allocated
 				return Initialise_Device_Stack_InvalidPointer;
 			if (cudaMalloc(&globalStack, width * height * globalMaxStack * sizeof(Complex)) == cudaErrorMemoryAllocation) //Construct new stack array
 				return Initialise_Device_Stack_MemAlloc;
 			stackSize = width * height * globalMaxStack * sizeof(Complex); //Update stackSize
 		}
-		if (isVerbose)
-			printf("	Copying list to device\n");
+		if (log_str != nullptr)
+			log_str("	Copying list to device\n");
 		if (cudaFree(globalList) == cudaErrorInvalidDevicePointer) //Free device token list
 			return Initialise_Device_List_InvalidPointer;
 		if (cudaMalloc(&globalList, list.count() * sizeof(Token)) == cudaErrorMemoryAllocation) //Allocate new token list
@@ -174,8 +185,8 @@ __host__ ERRORCODES entryInitialise(unsigned width, unsigned height, TokenList l
 
 __host__ ERRORCODES entryCalculate(Complex min, Complex max)
 {
-	if (isVerbose)
-		printf("Entry Calculate\n");
+	if (log_str != nullptr)
+		log_str("Entry Calculate\n");
 
 	int N = globalWidth * globalHeight;
 	ERRORCODES err = Success;
@@ -186,8 +197,8 @@ __host__ ERRORCODES entryCalculate(Complex min, Complex max)
 
 	if (!isHost)
 	{
-		if (isVerbose)
-			printf("	Single-precision Kernel Execuation\n");
+		if (log_str != nullptr)
+			log_str("	Double-precision Kernel Execution\n");
 
 		if (isShared)
 			sharedCalculatef << < N / threadCount + (N % threadCount ? 1 : 0), threadCount, threadCount * globalMaxStack * sizeof(Complex) >> >(globalDeviceResults, globalList, globalListCount, globalMaxStack, first, last - first, globalWidth, globalHeight, globalWidth * globalHeight);
@@ -210,8 +221,8 @@ __host__ ERRORCODES entryCalculate(Complex min, Complex max)
 
 __host__ ERRORCODES entryDestruct()
 {
-	if (isVerbose)
-		printf("Entry Destruct\n");
+	if (log_str != nullptr)
+		log_str("Entry Destruct\n");
 
 	ERRORCODES err = Success;
 	if (isHost)
@@ -270,67 +281,4 @@ __host__ Complex entryNewtonRaphson(TokenList list, Complex xn, int timeout)
 		return next;
 
 	return entryNewtonRaphson(list, next, timeout);
-}
-
-int main()
-{
-
-
-	entryConstruct(true);
-
-	auto answer = new RGB[1920*1080];
-
-	TokenList list;
-	unsigned count = 3;
-
-	Token* tokens = new Token[count];
-
-	tokens[0] = { 1, { 0, 0 } };
-	tokens[1] = { 1, { 0, 0 } };
-	tokens[2] = { 2, { 4, 0 } };
-
-	list = { count, tokens };
-
-	entryInitialise(1920, 1080, list, answer); //1920 x 1080 f(z) = z Quickest, simplest full HD graph
-
-	entryCalculate({ -200.0f, -200.0f }, { 300.0f, 300.0f });
-
-	RGB color; 
-	thrust::complex<double> z;
-	double mod, arg;
-
-	entryTrace({ 3.0, 0.0 }, list, &z, &color, &mod, &arg);
-
-	printf("answer: %f, %f - %f, %f\n", z.real(), z.imag(), mod, arg);
-
-	//entryInitialise(1920, 1080, TokenList<Precision>({ { 1, { 0, 0 } }, { 1, { 1, 0 } }, { 2, { 4, 0 } } })); //1920 x 1080 f(z) = z ^ z Binary operation full HD graph
-
-	//answer = entryCalculate({ -2.0f, -2.0f }, { 2.0f, 2.0f }, error);
-	
-	//entryInitialise(1920, 1080, TokenList<Precision>({ { 1, { 0, 0 } }, { 1, { 0, 0 } }, { 1, { 0, 0 } }, { 1, { 0, 0 } }, { 1, { 0, 0 } }, { 1, { 0, 0 } }, { 2, { 1, 0 } }, { 2, { 1, 0 } }, { 2, { 1, 0 } }, { 2, { 1, 0 } }, { 2, { 1, 0 } } })); //1920 x 1080 f(z) = z + z + z + z + Z Tests globalCalculate kernel
-
-	//entryCalculate({ -2.0f, -2.0f }, { 2.0f, 2.0f }, error);
-	
-	//entryInitialise(1920 * 2, 1080 * 2, TokenList<Precision>({ { 3, { 1, 0 } }, { 1, { 0, 0 } }, { 1, { 0, 0 } }, { 2, { 2, 0 } }, { 2, { 1, 0 } }, { 2, { 9, 0 } } })); //4k f(z) = ln(z^2 + 1) //Somewhat difficult 4K graph
-
-	//answer = entryCalculate({ -2.0f, -2.0f }, { 2.0f, 2.0f }, error);
-
-	//entryInitialise(1920 * 2, 1080 * 2, TokenList<Precision>({ { 1, { 0, 0 } }, { 3, { 1, 0 } }, { 2, { 4, 0 } }, { 2, { 23, 0 } }, { 1, { 0, 0 } }, { 3, { 2, 0 } }, { 2, { 4, 0 } }, { 2, { 23, 0 } }, { 2, { 1, 0 } } })); //4k First few terms of riemann zeta function //Somewhat difficult 4K graph
-	
-	//answer = entryCalculate({ -2.0f, -2.0f }, { 2.0f, 2.0f }, error);
-
-	//entryInitialise(1920, 1080, TokenList<Precision>({ { 1, { 0, 0 } }, { 1, { 0, 0 } }, { 2, { 4, 0 } } })); //1920 x 1080 f(z) = ln(z) Unary operation full HD graph
-
-	//answer = entryCalculate({ 2.0f, 2.0f }, { 1002.0f, 1002.0f }, error);
-
-	for (int i = 0; i < 10; i++)
-		printf("%i %i %i %i - ind: %i\n", (int)answer[i].a, (int)answer[i].r, (int)answer[i].g, (int)answer[i].b, i);
-
-
-	//for (int i = 1920 * 1080 - 10; i < 1920 * 1080; i++)
-	//	printf("(%i) %i %i %i - ind: %i\n", (int)answer[i].a, (int)answer[i].r, (int)answer[i].g, (int)answer[i].b, i);
-
-	cudaDeviceReset();
-
-	while (1);
 }

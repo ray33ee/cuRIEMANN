@@ -26,3 +26,10 @@ FIRST COMMIT - Version 1.0.0
  - min and max domain values converted to compatible first and last domain values.
  - 'Complex' typedef introduced
  - Obsolete 'sharedCalculate' function removed
+
+==========================================================================
+ - Version 1.0.4
+==========================================================================
+
+ - Flag list is only shown if isVerbose is true
+ - isVerbose removed and replaced with Log_String function, passed to dll as argument
